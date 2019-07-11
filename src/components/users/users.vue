@@ -32,16 +32,16 @@
         </el-table-column>
         <el-table-column label="用户状态">
             <template slot-scope="scope">
-                <el-switch v-model="scope.row.mg_state" active-color="#13ce66" inactive-color="#ff4949">
+                <el-switch @change="changeState(scope.row)" v-model="scope.row.mg_state" active-color="#13ce66" inactive-color="#ff4949">
                 </el-switch>
             </template>
         </el-table-column>
         <el-table-column label="操作">
             <template slot-scope="scope">
                 <el-row>
-                    <el-button size="mini" plain type="primary" icon="el-icon-edit" circle @click="writeUser"></el-button>
+                    <el-button size="mini" plain type="primary" icon="el-icon-edit" circle @click="writeUser(scope.row)"></el-button>
                     <el-button size="mini" plain type="danger" icon="el-icon-delete" circle @click="showUserDel(scope.row.id)"></el-button>
-                    <el-button size="mini" plain type="success" icon="el-icon-check" circle></el-button>
+                    <el-button size="mini" plain type="success" icon="el-icon-check" circle @click="rightUser(scope.row)"></el-button>
                 </el-row>
             </template>
         </el-table-column>
@@ -60,7 +60,7 @@
                 <el-input v-model="form.email" autocomplete="off"></el-input>
             </el-form-item>
             <el-form-item label="电话" label-width="100px">
-                <el-input v-model="form.phone" autocomplete="off"></el-input>
+                <el-input v-model="form.mobile" autocomplete="off"></el-input>
             </el-form-item>
         </el-form>
         <div slot="footer" class="dialog-footer">
@@ -69,21 +69,41 @@
         </div>
     </el-dialog>
 
-     <el-dialog title="编辑" :visible.sync="dialogFormVisibleEdit">
+    <el-dialog title="编辑" :visible.sync="dialogFormVisibleEdit">
         <el-form v-model="form">
             <el-form-item label="用户名" label-width="100px">
-                <el-input v-model="form.username" autocomplete="off"></el-input>
+                <el-input disabled v-model="form.username" autocomplete="off"></el-input>
             </el-form-item>
             <el-form-item label="邮箱" label-width="100px">
                 <el-input v-model="form.email" autocomplete="off"></el-input>
             </el-form-item>
             <el-form-item label="电话" label-width="100px">
-                <el-input v-model="form.phone" autocomplete="off"></el-input>
+                <el-input v-model="form.mobile" autocomplete="off"></el-input>
             </el-form-item>
         </el-form>
         <div slot="footer" class="dialog-footer">
             <el-button @click="dialogFormVisible = false">取 消</el-button>
-            <el-button type="primary" @click="addUser()">确 定</el-button>
+            <el-button type="primary" @click="editUser()">确 定</el-button>
+        </div>
+    </el-dialog>
+
+    <el-dialog title="对勾" :visible.sync="dialogFormVisibleRight">
+        <el-form :model="form">
+            <el-form-item label="用户名" label-width="100px">
+                {{currUserName}}
+            </el-form-item>
+            <el-form-item label="角色" :label-width="formLabelWidth">
+                <el-select v-model="currRoleId">
+                    <!-- v-model与:value一样，显示:label -->
+                    <el-option label="请选择" :value="-1"></el-option>
+                    <el-option v-for="(item,i) in roles" :value="item.id" 
+                    :key="i" :label="item.roleName"></el-option>
+                </el-select>
+            </el-form-item>
+        </el-form>
+        <div slot="footer" class="dialog-footer">
+            <el-button @click="dialogFormVisible = false">取 消</el-button>
+            <el-button type="primary" @click="setRole()">确 定</el-button>
         </div>
     </el-dialog>
 </el-card>
@@ -100,56 +120,89 @@ export default {
             total: -1,
             dialogFormVisibleAdd: false,
             dialogFormVisibleEdit: false,
+            dialogFormVisibleRight: false,
+            formLabelWidth: '120px',
             form: {
                 usename: '',
                 password: '',
                 email: '',
-                phone: ''
-            }
+                mobile: ''
+            },
+            currRoleId: -1,
+            currUserId: -1,
+            currUserName: '',
+            //保存所有的角色数据
+            roles: []
         }
     },
     created() {
         this.getUserList()
     },
     methods: {
-       writeUser() {
-           this.dialogFormVisibleEdit = true
-       },
-       showUserDel(userId) {
-           
+        async setRole() {
+            const res = await this.$http.put(`users/${this.currUserId}/role`,{
+                rid: this.currRoleId
+            })
+            this.dialogFormVisibleRight = false
+        },
+        async rightUser(user) {
+            this.currUserName = user.username
+
+            this.currUserId = user.id
+            const res1 = await this.$http.get(`roles`)
+            console.log(res1)
+            this.roles = res1.data.data
+
+            const res = await this.$http.get(`users/${user.id}`)
+            this.currRoleId = res.data.data.rid
+            this.dialogFormVisibleRight = true
+        },
+        async changeState(user) {
+            const res = await this.$http.put(`users/${user.id}/state/${user.mg_state}`)
+        },
+        async editUser() {
+            const res = await this.$http.put(`users/${this.form.id}`, this.form)
+            this.dialogFormVisibleEdit = false
+            this.getUserList()
+        },
+        writeUser(user) {
+            this.form = user
+            this.dialogFormVisibleEdit = true
+        },
+        showUserDel(userId) {
+
             this.$confirm('此操作将永久删除该文件, 是否继续?', '提示', {
-                confirmButtonText: '确定',
-                cancelButtonText: '取消',
-                type: 'warning'
-            }).then( async () => {
-                //把userId以参数形式传过来
-                const res = await this.$http.delete(`users/${userId}`)
-                const {
-                meta: {
-                    status,
-                    msg
-                }
-            } = res.data
-                if(status === 200){
-                    this.pagenum = 1
-                    this.getUserList()
+                    confirmButtonText: '确定',
+                    cancelButtonText: '取消',
+                    type: 'warning'
+                }).then(async () => {
+                    //把userId以参数形式传过来
+                    const res = await this.$http.delete(`users/${userId}`)
+                    const {
+                        meta: {
+                            status,
+                            msg
+                        }
+                    } = res.data
+                    if (status === 200) {
+                        this.pagenum = 1
+                        this.getUserList()
+                        this.$message({
+                            type: 'success',
+                            message: '删除成功!'
+                        });
+                    }
+
+                })
+                .catch(() => {
                     this.$message({
-                    type: 'success',
-                    message: '删除成功!'
-                });
-                }
-                
-            })
-            .catch(() => {
-                this.$message({
-                    type: 'info',
-                    message: '已取消删除'
-                });
-            })
+                        type: 'info',
+                        message: '已取消删除'
+                    });
+                })
         },
         async addUser() {
             const res = await this.$http.post('users', this.form)
-            console.log(res);
             const {
                 meta: {
                     status,
@@ -168,6 +221,7 @@ export default {
 
         },
         showUserDia() {
+            this.form = {}
             this.dialogFormVisibleAdd = true
         },
         loadUserList() {
@@ -177,13 +231,13 @@ export default {
             this.getUserList()
         },
         handleSizeChange(val) {
-            console.log(`每页 ${val} 条`);
+            // console.log(`每页 ${val} 条`);
             this.pagesize = val
             this.pagenum = 1
             this.getUserList()
         },
         handleCurrentChange(val) {
-            console.log(`当前页: ${val}`);
+            // console.log(`当前页: ${val}`);
             this.pagenum = val
             this.getUserList()
         },
@@ -194,7 +248,6 @@ export default {
 
             const res = await this.$http.get(
                 `users?query=${this.query}&pagenum=${this.pagenum}&pagesize=${this.pagesize}`)
-            console.log(res);
 
             const {
                 meta: {
