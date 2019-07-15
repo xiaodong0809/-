@@ -8,4 +8,14 @@ MyHttpServer.install = (Vue) => {
     // 4. 添加实例方法
     Vue.prototype.$http = axios 
 }
+//添加请求拦截器
+axios.interceptors.request.use(function (config) {
+    if(config.url !=='login'){
+        const AUTH_TOKEN = localStorage.getItem('token')
+       config.headers.common['Authorization'] = AUTH_TOKEN
+    }
+    return config;
+},function(error) {
+    return Promise.reject(error)
+})
 export default MyHttpServer
